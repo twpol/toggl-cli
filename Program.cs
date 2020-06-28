@@ -54,7 +54,7 @@ namespace Toggl_CLI
 
         static Query GetQuery(Options options)
         {
-            var configFile = new FileInfo(options.Config);
+            var configFile = new FileInfo(Path.Combine(AppContext.BaseDirectory, options.Config));
             var config = new ConfigurationBuilder()
                 .AddJsonFile(configFile.FullName)
                 .Build();
