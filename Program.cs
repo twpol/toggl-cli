@@ -23,6 +23,11 @@ namespace Toggl_CLI
         {
         }
 
+        [Verb("recent", HelpText = "Shows details of recent timers.")]
+        public class RecentOptions : Options
+        {
+        }
+
         [Verb("current", HelpText = "Shows details of the current timer.")]
         public class CurrentOptions : Options
         {
@@ -64,8 +69,9 @@ namespace Toggl_CLI
             Console.OutputEncoding = Encoding.UTF8;
             try
             {
-                Parser.Default.ParseArguments<ProjectsOptions, CurrentOptions, SetOptions, StartOptions, StopOptions>(args)
+                Parser.Default.ParseArguments<ProjectsOptions, RecentOptions, CurrentOptions, SetOptions, StartOptions, StopOptions>(args)
                     .WithParsed<ProjectsOptions>(options => Projects(options).Wait())
+                    .WithParsed<RecentOptions>(options => Recent(options).Wait())
                     .WithParsed<CurrentOptions>(options => Current(options).Wait())
                     .WithParsed<SetOptions>(options => Set(options).Wait())
                     .WithParsed<StartOptions>(options => Start(options).Wait())
@@ -100,6 +106,17 @@ namespace Toggl_CLI
             return project;
         }
 
+        static async Task<string> FormatTimer(Query query, TimeEntry timer)
+        {
+            var project = await query.GetProject(timer.pid);
+            if (timer.stop.Year == 1)
+            {
+                var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
+                return $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-now   ({duration.ToString("hh\\:mm")}) - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
+            }
+            return $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop - timer.start).ToString("hh\\:mm")}) - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
+        }
+
         static async Task Projects(ProjectsOptions options)
         {
             var query = GetQuery(options);
@@ -113,6 +130,15 @@ namespace Toggl_CLI
             }
         }
 
+        static async Task Recent(Options options)
+        {
+            var query = GetQuery(options);
+            foreach (var timer in await query.GetRecentTimers())
+            {
+                Console.WriteLine(await FormatTimer(query, timer));
+            }
+        }
+
         static async Task Current(Options options)
         {
             var query = GetQuery(options);
@@ -123,9 +149,7 @@ namespace Toggl_CLI
             }
             else
             {
-                var project = await query.GetProject(timer.pid);
-                var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
-                Console.WriteLine($"\u25B6\uFE0F {duration} - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]");
+                Console.WriteLine($"\u25B6\uFE0F {await FormatTimer(query, timer)}");
             }
         }
 
