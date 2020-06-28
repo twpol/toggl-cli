@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -25,6 +27,7 @@ namespace Toggl_CLI.Toggl
         readonly string Token;
 
         HttpClient Client = new HttpClient();
+        Dictionary<int, Project> ProjectCache = new Dictionary<int, Project>();
 
         public Query(string token)
         {
@@ -35,21 +38,30 @@ namespace Toggl_CLI.Toggl
         {
             var uri = new Uri(Endpoint + type);
 
-            var request = new HttpRequestMessage(method, uri);
-            request.Headers.UserAgent.Clear();
-            request.Headers.UserAgent.Add(ProductInfoHeaderValue.Parse(UserAgent));
-            request.Headers.Authorization = new AuthenticationHeaderValue("basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Token}:api_token")));
-            request.Content = content;
+            while (true)
+            {
+                var request = new HttpRequestMessage(method, uri);
+                request.Headers.UserAgent.Clear();
+                request.Headers.UserAgent.Add(ProductInfoHeaderValue.Parse(UserAgent));
+                request.Headers.Authorization = new AuthenticationHeaderValue("basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Token}:api_token")));
+                request.Content = content;
 
-            var response = await Client.SendAsync(request);
-            var text = await response.Content.ReadAsStringAsync();
-            try
-            {
-                return JToken.Parse(text);
-            }
-            catch (JsonReaderException error)
-            {
-                throw new TogglException(text, error);
+                var response = await Client.SendAsync(request);
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    Thread.Sleep(1000);
+                    continue;
+                }
+
+                var text = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    return JToken.Parse(text);
+                }
+                catch (JsonReaderException error)
+                {
+                    throw new TogglException(text, error);
+                }
             }
         }
 
@@ -66,6 +78,15 @@ namespace Toggl_CLI.Toggl
         internal async Task<JToken> Put(string type, JObject content)
         {
             return await Send(HttpMethod.Put, type, new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json"));
+        }
+
+        internal async Task<U> GetCached<T, U>(Dictionary<T, U> cache, T key, Func<Task<U>> generator)
+        {
+            if (!cache.ContainsKey(key))
+            {
+                cache[key] = await generator();
+            }
+            return cache[key];
         }
 
         public async Task<IReadOnlyList<Workspace>> GetWorkspaces()
@@ -88,7 +109,12 @@ namespace Toggl_CLI.Toggl
 
         public async Task<Project> GetProject(int projectId)
         {
-            return (await Get($"projects/{projectId}"))["data"].ToObject<Project>();
+            return await GetCached(ProjectCache, projectId, async () => (await Get($"projects/{projectId}"))["data"].ToObject<Project>());
+        }
+
+        public async Task<IReadOnlyList<TimeEntry>> GetRecentTimers()
+        {
+            return (await Get("time_entries")).ToObject<IReadOnlyList<TimeEntry>>();
         }
 
         public async Task<TimeEntry> GetCurrentTimer()
