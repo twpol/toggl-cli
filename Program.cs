@@ -36,27 +36,19 @@ namespace Toggl_CLI
         [Verb("set", HelpText = "Sets properties of the currently running timer.")]
         public class SetOptions : Options
         {
-            [Option('p', "project", HelpText = "A new project for the timer, either name or ID.")]
+            [Option('p', "project", HelpText = "A project for the timer, either name or ID.")]
             public string Project { get; set; }
 
-            [Option('d', "description", HelpText = "A new description for the timer.")]
+            [Option('d', "description", HelpText = "A description for the timer.")]
             public string Description { get; set; }
 
-            [Option('t', "tags", HelpText = "Some new tags for the timer (use '~' for empty).")]
+            [Option('t', "tags", HelpText = "Some tags for the timer (use '~' for empty).")]
             public IReadOnlyList<string> Tags { get; set; }
         }
 
         [Verb("start", HelpText = "Start a new timer running.")]
-        public class StartOptions : Options
+        public class StartOptions : SetOptions
         {
-            [Option('p', "project", Required = true, HelpText = "Specify a project for the timer, either name or ID.")]
-            public string Project { get; set; }
-
-            [Option('d', "description", HelpText = "Provide a description for the timer.")]
-            public string Description { get; set; }
-
-            [Option('t', "tags", HelpText = "Provide some tags for the timer.")]
-            public IReadOnlyList<string> Tags { get; set; }
         }
 
         [Verb("stop", HelpText = "Stop the current timer.")]
@@ -64,18 +56,13 @@ namespace Toggl_CLI
         {
         }
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
             try
             {
-                Parser.Default.ParseArguments<ProjectsOptions, RecentOptions, CurrentOptions, SetOptions, StartOptions, StopOptions>(args)
-                    .WithParsed<ProjectsOptions>(options => Projects(options).Wait())
-                    .WithParsed<RecentOptions>(options => Recent(options).Wait())
-                    .WithParsed<CurrentOptions>(options => Current(options).Wait())
-                    .WithParsed<SetOptions>(options => Set(options).Wait())
-                    .WithParsed<StartOptions>(options => Start(options).Wait())
-                    .WithParsed<StopOptions>(options => Stop(options).Wait());
+                await Parser.Default.ParseArguments<ProjectsOptions, RecentOptions, CurrentOptions, SetOptions, StartOptions, StopOptions>(args)
+                    .WithParsedAsync(Run);
             }
             catch (AggregateException error) when (error.InnerExceptions.Count == 1 && error.InnerException is ApplicationException)
             {
@@ -109,12 +96,36 @@ namespace Toggl_CLI
         static async Task<string> FormatTimer(Query query, TimeEntry timer)
         {
             var project = await query.GetProject(timer.pid);
-            if (timer.stop.Year == 1)
+            var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
+            var timeRange = timer.stop.Year == 1 ?
+                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-now   ({duration.ToString("hh\\:mm")})" :
+                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop - timer.start).ToString("hh\\:mm")})";
+            return $"{timeRange} - {project?.name ?? "(none)"} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
+        }
+
+        static async Task Run(object options)
+        {
+            switch (options)
             {
-                var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
-                return $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-now   ({duration.ToString("hh\\:mm")}) - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
+                case ProjectsOptions po:
+                    await Projects(po);
+                    break;
+                case RecentOptions ro:
+                    await Recent(ro);
+                    break;
+                case CurrentOptions co:
+                    await Current(co);
+                    break;
+                case StartOptions so:
+                    await Start(so);
+                    break;
+                case SetOptions so:
+                    await Set(so);
+                    break;
+                case StopOptions so:
+                    await Stop(so);
+                    break;
             }
-            return $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop - timer.start).ToString("hh\\:mm")}) - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
         }
 
         static async Task Projects(ProjectsOptions options)
@@ -164,7 +175,7 @@ namespace Toggl_CLI
             {
                 await query.SetCurrentTimerDescription(options.Description);
             }
-            if (options.Tags != null)
+            if (options.Tags.Count > 0)
             {
                 if (options.Tags.Count == 1 && options.Tags[0] == "~")
                     await query.SetCurrentTimerTags(new string[0]);
@@ -177,18 +188,15 @@ namespace Toggl_CLI
         static async Task Start(StartOptions options)
         {
             var query = GetQuery(options);
-            var project = await GetMatchingProject(query, options.Project);
-            await query.StartTimer(project, options.Description, options.Tags);
-            Console.WriteLine($"Started timer in {project.name} for '{options.Description}'");
+            await query.StartTimer();
+            await Set(options);
         }
 
         static async Task Stop(StopOptions options)
         {
             var query = GetQuery(options);
-            if (await query.StopTimer())
-                Console.WriteLine("Stopped timer");
-            else
-                Console.WriteLine("No timer running");
+            await query.StopTimer();
+            await Current(options);
         }
     }
 }
