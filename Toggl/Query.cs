@@ -96,12 +96,43 @@ namespace Toggl_CLI.Toggl
             return (await Get("time_entries/current"))["data"].ToObject<TimeEntry>();
         }
 
-        public async Task StartTimer(Project project, string description)
+        public async Task SetCurrentTimerProject(Project project)
+        {
+            var timer = await GetCurrentTimer();
+            await Put($"time_entries/{timer.id}", new JObject(
+                new JProperty("time_entry", new JObject(
+                    new JProperty("pid", project.id)
+                ))
+            ));
+        }
+
+        public async Task SetCurrentTimerDescription(string description)
+        {
+            var timer = await GetCurrentTimer();
+            await Put($"time_entries/{timer.id}", new JObject(
+                new JProperty("time_entry", new JObject(
+                    new JProperty("description", description)
+                ))
+            ));
+        }
+
+        public async Task SetCurrentTimerTags(IReadOnlyList<string> tags)
+        {
+            var timer = await GetCurrentTimer();
+            await Put($"time_entries/{timer.id}", new JObject(
+                new JProperty("time_entry", new JObject(
+                    new JProperty("tags", JArray.FromObject(tags))
+                ))
+            ));
+        }
+
+        public async Task StartTimer(Project project, string description, IReadOnlyList<string> tags)
         {
             await Post("time_entries/start", new JObject(
                 new JProperty("time_entry", new JObject(
                     new JProperty("pid", project.id),
                     new JProperty("description", description),
+                    new JProperty("tags", JArray.FromObject(tags)),
                     new JProperty("created_with", UserAgent)
                 ))
             ));
