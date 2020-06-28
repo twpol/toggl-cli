@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Toggl_CLI.Toggl;
 
@@ -19,6 +20,11 @@ namespace Toggl_CLI
 
         [Verb("projects", HelpText = "List all available projects.")]
         public class ProjectsOptions : Options
+        {
+        }
+
+        [Verb("current", HelpText = "Shows details of the current timer.")]
+        public class CurrentOptions : Options
         {
         }
 
@@ -39,10 +45,12 @@ namespace Toggl_CLI
 
         static void Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.UTF8;
             try
             {
-                Parser.Default.ParseArguments<ProjectsOptions, StartOptions, StopOptions>(args)
+                Parser.Default.ParseArguments<ProjectsOptions, CurrentOptions, StartOptions, StopOptions>(args)
                     .WithParsed<ProjectsOptions>(options => Projects(options).Wait())
+                    .WithParsed<CurrentOptions>(options => Current(options).Wait())
                     .WithParsed<StartOptions>(options => Start(options).Wait())
                     .WithParsed<StopOptions>(options => Stop(options).Wait());
             }
@@ -73,6 +81,23 @@ namespace Toggl_CLI
                 }
             }
         }
+
+        static async Task Current(CurrentOptions options)
+        {
+            var query = GetQuery(options);
+            var timer = await query.GetCurrentTimer();
+            if (timer == null)
+            {
+                Console.WriteLine("\u23F9\uFE0F No timer running");
+            }
+            else
+            {
+                var project = await query.GetProject(timer.pid);
+                var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
+                Console.WriteLine($"\u25B6\uFE0F {duration} - {project.name} - {timer.description} [{string.Join(", ", timer.tags)}]");
+            }
+        }
+
         static async Task Start(StartOptions options)
         {
             var query = GetQuery(options);

@@ -86,6 +86,16 @@ namespace Toggl_CLI.Toggl
             return (await Get($"workspaces/{workspace.id}/projects")).ToObject<List<Project>>();
         }
 
+        public async Task<Project> GetProject(int projectId)
+        {
+            return (await Get($"projects/{projectId}"))["data"].ToObject<Project>();
+        }
+
+        public async Task<TimeEntry> GetCurrentTimer()
+        {
+            return (await Get("time_entries/current"))["data"].ToObject<TimeEntry>();
+        }
+
         public async Task StartTimer(Project project, string description)
         {
             await Post("time_entries/start", new JObject(
