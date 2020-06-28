@@ -109,6 +109,10 @@ namespace Toggl_CLI.Toggl
 
         public async Task<Project> GetProject(int projectId)
         {
+            if (projectId == 0)
+            {
+                return null;
+            }
             return await GetCached(ProjectCache, projectId, async () => (await Get($"projects/{projectId}"))["data"].ToObject<Project>());
         }
 
@@ -152,13 +156,10 @@ namespace Toggl_CLI.Toggl
             ));
         }
 
-        public async Task StartTimer(Project project, string description, IReadOnlyList<string> tags)
+        public async Task StartTimer()
         {
             await Post("time_entries/start", new JObject(
                 new JProperty("time_entry", new JObject(
-                    new JProperty("pid", project.id),
-                    new JProperty("description", description),
-                    new JProperty("tags", JArray.FromObject(tags)),
                     new JProperty("created_with", UserAgent)
                 ))
             ));
