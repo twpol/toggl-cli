@@ -28,6 +28,19 @@ namespace Toggl_CLI
         {
         }
 
+        [Verb("set", HelpText = "Sets properties of the currently running timer.")]
+        public class SetOptions : Options
+        {
+            [Option('p', "project", HelpText = "A new project for the timer, either name or ID.")]
+            public string Project { get; set; }
+
+            [Option('d', "description", HelpText = "A new description for the timer.")]
+            public string Description { get; set; }
+
+            [Option('t', "tags", HelpText = "Some new tags for the timer (use '~' for empty).")]
+            public IReadOnlyList<string> Tags { get; set; }
+        }
+
         [Verb("start", HelpText = "Start a new timer running.")]
         public class StartOptions : Options
         {
@@ -36,6 +49,9 @@ namespace Toggl_CLI
 
             [Option('d', "description", HelpText = "Provide a description for the timer.")]
             public string Description { get; set; }
+
+            [Option('t', "tags", HelpText = "Provide some tags for the timer.")]
+            public IReadOnlyList<string> Tags { get; set; }
         }
 
         [Verb("stop", HelpText = "Stop the current timer.")]
@@ -48,9 +64,10 @@ namespace Toggl_CLI
             Console.OutputEncoding = Encoding.UTF8;
             try
             {
-                Parser.Default.ParseArguments<ProjectsOptions, CurrentOptions, StartOptions, StopOptions>(args)
+                Parser.Default.ParseArguments<ProjectsOptions, CurrentOptions, SetOptions, StartOptions, StopOptions>(args)
                     .WithParsed<ProjectsOptions>(options => Projects(options).Wait())
                     .WithParsed<CurrentOptions>(options => Current(options).Wait())
+                    .WithParsed<SetOptions>(options => Set(options).Wait())
                     .WithParsed<StartOptions>(options => Start(options).Wait())
                     .WithParsed<StopOptions>(options => Stop(options).Wait());
             }
@@ -69,6 +86,20 @@ namespace Toggl_CLI
             return new Query(config.GetSection("Toggl")["ApiToken"]);
         }
 
+        static async Task<Project> GetMatchingProject(Query query, string projectNameOrId)
+        {
+            var projects = await query.GetProjects();
+            var project = projects.FirstOrDefault(project =>
+                project.id.Equals(projectNameOrId) ||
+                project.name.Equals(projectNameOrId, StringComparison.CurrentCultureIgnoreCase)
+            );
+            if (project == null)
+            {
+                throw new ApplicationException($"No project matching '{projectNameOrId}' was found");
+            }
+            return project;
+        }
+
         static async Task Projects(ProjectsOptions options)
         {
             var query = GetQuery(options);
@@ -82,7 +113,7 @@ namespace Toggl_CLI
             }
         }
 
-        static async Task Current(CurrentOptions options)
+        static async Task Current(Options options)
         {
             var query = GetQuery(options);
             var timer = await query.GetCurrentTimer();
@@ -94,20 +125,36 @@ namespace Toggl_CLI
             {
                 var project = await query.GetProject(timer.pid);
                 var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
-                Console.WriteLine($"\u25B6\uFE0F {duration} - {project.name} - {timer.description} [{string.Join(", ", timer.tags)}]");
+                Console.WriteLine($"\u25B6\uFE0F {duration} - {project.name} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]");
             }
+        }
+
+        static async Task Set(SetOptions options)
+        {
+            var query = GetQuery(options);
+            if (!string.IsNullOrEmpty(options.Project))
+            {
+                await query.SetCurrentTimerProject(await GetMatchingProject(query, options.Project));
+            }
+            if (!string.IsNullOrEmpty(options.Description))
+            {
+                await query.SetCurrentTimerDescription(options.Description);
+            }
+            if (options.Tags != null)
+            {
+                if (options.Tags.Count == 1 && options.Tags[0] == "~")
+                    await query.SetCurrentTimerTags(new string[0]);
+                else
+                    await query.SetCurrentTimerTags(options.Tags);
+            }
+            await Current(options);
         }
 
         static async Task Start(StartOptions options)
         {
             var query = GetQuery(options);
-            var projects = await query.GetProjects();
-            var project = projects.FirstOrDefault(project => project.id.Equals(options.Project) || project.name.Equals(options.Project, StringComparison.CurrentCultureIgnoreCase));
-            if (project == null)
-            {
-                throw new ApplicationException($"No project matching '{options.Project}' was found");
-            }
-            await query.StartTimer(project, options.Description);
+            var project = await GetMatchingProject(query, options.Project);
+            await query.StartTimer(project, options.Description, options.Tags);
             Console.WriteLine($"Started timer in {project.name} for '{options.Description}'");
         }
 
