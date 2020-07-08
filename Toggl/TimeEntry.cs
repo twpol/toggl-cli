@@ -11,7 +11,7 @@ namespace Toggl_CLI.Toggl
         public DateTimeOffset start;
         public DateTimeOffset stop;
         public int duration;
-        public string description;
-        public IReadOnlyList<string> tags;
+        public string description = "";
+        public IReadOnlyList<string> tags = new string[0];
     }
 }

@@ -19,6 +19,10 @@ namespace Toggl_CLI.Toggl
             public TogglException(string message, Exception inner) : base(message, inner)
             {
             }
+
+            public TogglException(string message) : base(message)
+            {
+            }
         }
 
         const string Endpoint = "https://www.toggl.com/api/v8/";
@@ -34,7 +38,7 @@ namespace Toggl_CLI.Toggl
             Token = token;
         }
 
-        internal async Task<JToken> Send(HttpMethod method, string type, HttpContent content = null)
+        internal async Task<JToken> Send(HttpMethod method, string type, HttpContent? content = null)
         {
             var uri = new Uri(Endpoint + type);
 
@@ -80,7 +84,7 @@ namespace Toggl_CLI.Toggl
             return await Send(HttpMethod.Put, type, new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json"));
         }
 
-        internal async Task<U> GetCached<T, U>(Dictionary<T, U> cache, T key, Func<Task<U>> generator)
+        internal async Task<U> GetCached<T, U>(Dictionary<T, U> cache, T key, Func<Task<U>> generator) where T : notnull
         {
             if (!cache.ContainsKey(key))
             {
@@ -91,7 +95,7 @@ namespace Toggl_CLI.Toggl
 
         public async Task<IReadOnlyList<Workspace>> GetWorkspaces()
         {
-            return (await Get("workspaces")).ToObject<List<Workspace>>();
+            return (await Get("workspaces")).ToObject<List<Workspace>>()!;
         }
 
         public async Task<IReadOnlyList<Project>> GetProjects()
@@ -104,31 +108,32 @@ namespace Toggl_CLI.Toggl
 
         public async Task<IReadOnlyList<Project>> GetProjects(Workspace workspace)
         {
-            return (await Get($"workspaces/{workspace.id}/projects")).ToObject<List<Project>>();
+            return (await Get($"workspaces/{workspace.id}/projects")).ToObject<List<Project>>()!;
         }
 
-        public async Task<Project> GetProject(int projectId)
+        public async Task<Project?> GetProject(int projectId)
         {
             if (projectId == 0)
             {
                 return null;
             }
-            return await GetCached(ProjectCache, projectId, async () => (await Get($"projects/{projectId}"))["data"].ToObject<Project>());
+            return await GetCached(ProjectCache, projectId, async () => (await Get($"projects/{projectId}"))["data"]!.ToObject<Project>()!);
         }
 
         public async Task<IReadOnlyList<TimeEntry>> GetRecentTimers()
         {
-            return (await Get("time_entries")).ToObject<IReadOnlyList<TimeEntry>>();
+            return (await Get("time_entries")).ToObject<IReadOnlyList<TimeEntry>>()!;
         }
 
-        public async Task<TimeEntry> GetCurrentTimer()
+        public async Task<TimeEntry?> GetCurrentTimer()
         {
-            return (await Get("time_entries/current"))["data"].ToObject<TimeEntry>();
+            return (await Get("time_entries/current"))["data"]!.ToObject<TimeEntry>();
         }
 
         public async Task SetCurrentTimerProject(Project project)
         {
             var timer = await GetCurrentTimer();
+            if (timer == null) throw new TogglException("Cannot set timer properties without a running timer");
             await Put($"time_entries/{timer.id}", new JObject(
                 new JProperty("time_entry", new JObject(
                     new JProperty("pid", project.id)
@@ -139,6 +144,7 @@ namespace Toggl_CLI.Toggl
         public async Task SetCurrentTimerDescription(string description)
         {
             var timer = await GetCurrentTimer();
+            if (timer == null) throw new TogglException("Cannot set timer properties without a running timer");
             await Put($"time_entries/{timer.id}", new JObject(
                 new JProperty("time_entry", new JObject(
                     new JProperty("description", description)
@@ -149,6 +155,7 @@ namespace Toggl_CLI.Toggl
         public async Task SetCurrentTimerTags(IReadOnlyList<string> tags)
         {
             var timer = await GetCurrentTimer();
+            if (timer == null) throw new TogglException("Cannot set timer properties without a running timer");
             await Put($"time_entries/{timer.id}", new JObject(
                 new JProperty("time_entry", new JObject(
                     new JProperty("tags", JArray.FromObject(tags))
@@ -168,7 +175,7 @@ namespace Toggl_CLI.Toggl
         public async Task<bool> StopTimer()
         {
             var response = await Get("time_entries/current");
-            var currentTimer = response["data"].ToObject<JObject>();
+            var currentTimer = response["data"]!.ToObject<JObject>();
             if (currentTimer != null)
             {
                 await Put($"time_entries/{currentTimer["id"]}/stop", new JObject());
