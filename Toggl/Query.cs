@@ -21,7 +21,7 @@ namespace Toggl_CLI.Toggl
             }
         }
 
-        const string Endpoint = "https://www.toggl.com/api/v8/";
+        const string Endpoint = "https://api.track.toggl.com/api/v8/";
         const string UserAgent = "Toggl-CLI/1.0";
 
         readonly string Token;
