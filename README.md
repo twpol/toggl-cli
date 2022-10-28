@@ -1,3 +1,3 @@
 # Toggl CLI
 
-A command-line client for Toggl time tracking.
+Command-line tool for Toggl time tracking.
