@@ -81,6 +81,10 @@ namespace Toggl_CLI
 
         static async Task<Project> GetMatchingProject(Query query, string projectNameOrId)
         {
+            if (projectNameOrId == null)
+            {
+                return null;
+            }
             var projects = await query.GetProjects();
             var project = projects.FirstOrDefault(project =>
                 project.id.Equals(projectNameOrId) ||
@@ -188,8 +192,8 @@ namespace Toggl_CLI
         static async Task Start(StartOptions options)
         {
             var query = GetQuery(options);
-            await query.StartTimer();
-            await Set(options);
+            var timer = await query.StartTimer(await GetMatchingProject(query, options.Project), options.Description, options.Tags);
+            Console.WriteLine($"\u25B6\uFE0F {await FormatTimer(query, timer)}");
         }
 
         static async Task Stop(StopOptions options)

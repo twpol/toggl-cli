@@ -156,13 +156,24 @@ namespace Toggl_CLI.Toggl
             ));
         }
 
-        public async Task StartTimer()
+        public async Task<TimeEntry> StartTimer(Project project, string description, IReadOnlyList<string> tags)
         {
-            await Post("time_entries/start", new JObject(
-                new JProperty("time_entry", new JObject(
-                    new JProperty("created_with", UserAgent)
-                ))
+            var response = await Post("time_entries/start", new JObject(
+                new JProperty("time_entry", project != null ?
+                    new JObject(
+                        new JProperty("pid", project.id),
+                        new JProperty("description", description),
+                        new JProperty("tags", JArray.FromObject(tags)),
+                        new JProperty("created_with", UserAgent)
+                    ) :
+                    new JObject(
+                        new JProperty("description", description),
+                        new JProperty("tags", JArray.FromObject(tags)),
+                        new JProperty("created_with", UserAgent)
+                    )
+                )
             ));
+            return response["data"].ToObject<TimeEntry>();
         }
 
         public async Task<bool> StopTimer()
