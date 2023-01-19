@@ -27,7 +27,7 @@ namespace Toggl_CLI.Toggl
         readonly string Token;
 
         HttpClient Client = new HttpClient();
-        Dictionary<int, Project> ProjectCache = new Dictionary<int, Project>();
+        Dictionary<uint, Project> ProjectCache = new Dictionary<uint, Project>();
 
         public Query(string token)
         {
@@ -107,7 +107,7 @@ namespace Toggl_CLI.Toggl
             return (await Get($"workspaces/{workspace.id}/projects")).ToObject<List<Project>>();
         }
 
-        public async Task<Project> GetProject(int projectId)
+        public async Task<Project> GetProject(uint projectId)
         {
             if (projectId == 0)
             {

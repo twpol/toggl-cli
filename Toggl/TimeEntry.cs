@@ -5,9 +5,9 @@ namespace Toggl_CLI.Toggl
 {
     public class TimeEntry
     {
-        public int id;
-        public int wid;
-        public int pid;
+        public uint id;
+        public uint wid;
+        public uint pid;
         public DateTimeOffset start;
         public DateTimeOffset stop;
         public int duration;
