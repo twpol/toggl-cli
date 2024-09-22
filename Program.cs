@@ -99,11 +99,11 @@ namespace Toggl_CLI
 
         static async Task<string> FormatTimer(Query query, TimeEntry timer)
         {
-            var project = await query.GetProject(timer.pid);
-            var duration = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() + timer.duration);
-            var timeRange = timer.stop.Year == 1 ?
+            var project = timer.project_id.HasValue ? await query.GetProject(timer.workspace_id, timer.project_id.Value) : null;
+            var duration = DateTimeOffset.Now - timer.start;
+            var timeRange = timer.stop == null ?
                 $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-now   ({duration.ToString("hh\\:mm")})" :
-                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop - timer.start).ToString("hh\\:mm")})";
+                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.Value.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop.Value - timer.start).ToString("hh\\:mm")})";
             return $"{timeRange} - {project?.name ?? "(none)"} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
         }
 
