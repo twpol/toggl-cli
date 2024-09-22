@@ -101,9 +101,9 @@ namespace Toggl_CLI
         {
             var project = timer.project_id.HasValue ? await query.GetProject(timer.workspace_id, timer.project_id.Value) : null;
             var duration = DateTimeOffset.Now - timer.start;
-            var timeRange = timer.stop == null ?
-                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-now   ({duration.ToString("hh\\:mm")})" :
-                $"{timer.start.ToString("yyyy-MM-dd HH:mm")}-{timer.stop.Value.TimeOfDay.ToString("hh\\:mm")} ({(timer.stop.Value - timer.start).ToString("hh\\:mm")})";
+            var timeRange = !timer.stop.HasValue ?
+                $"{timer.start.LocalDateTime:yyyy-MM-dd HH:mm}-now   ({duration:hh\\:mm})" :
+                $"{timer.start.LocalDateTime:yyyy-MM-dd HH:mm}-{timer.stop.Value.LocalDateTime:HH\\:mm} ({timer.stop.Value - timer.start:hh\\:mm})";
             return $"{timeRange} - {project?.name ?? "(none)"} - {timer.description} [{(timer.tags == null ? "" : string.Join(", ", timer.tags))}]";
         }
 
