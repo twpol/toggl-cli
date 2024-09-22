@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -21,7 +22,7 @@ namespace Toggl_CLI.Toggl
             }
         }
 
-        const string Endpoint = "https://api.track.toggl.com/api/v8/";
+        const string Endpoint = "https://api.track.toggl.com/api/v9/";
         const string UserAgent = "Toggl-CLI/1.0";
 
         readonly string Token;
@@ -80,6 +81,11 @@ namespace Toggl_CLI.Toggl
             return await Send(HttpMethod.Put, type, new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json"));
         }
 
+        internal async Task<JToken> Patch(string type, JObject content)
+        {
+            return await Send(HttpMethod.Patch, type, new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json"));
+        }
+
         internal async Task<U> GetCached<T, U>(Dictionary<T, U> cache, T key, Func<Task<U>> generator)
         {
             if (!cache.ContainsKey(key))
@@ -96,10 +102,7 @@ namespace Toggl_CLI.Toggl
 
         public async Task<IReadOnlyList<Project>> GetProjects()
         {
-            return (await GetWorkspaces())
-                .Select(async workspace => await GetProjects(workspace))
-                .SelectMany(projects => projects.Result)
-                .ToList();
+            return (await Get($"me/projects")).ToObject<List<Project>>();
         }
 
         public async Task<IReadOnlyList<Project>> GetProjects(Workspace workspace)
@@ -107,82 +110,73 @@ namespace Toggl_CLI.Toggl
             return (await Get($"workspaces/{workspace.id}/projects")).ToObject<List<Project>>();
         }
 
-        public async Task<Project> GetProject(uint projectId)
+        public async Task<Project> GetProject(uint workspaceId, uint projectId)
         {
             if (projectId == 0)
             {
                 return null;
             }
-            return await GetCached(ProjectCache, projectId, async () => (await Get($"projects/{projectId}"))["data"].ToObject<Project>());
+            return await GetCached(ProjectCache, projectId, async () => (await Get($"workspaces/{workspaceId}/projects/{projectId}")).ToObject<Project>());
         }
 
         public async Task<IReadOnlyList<TimeEntry>> GetRecentTimers()
         {
-            return (await Get("time_entries")).ToObject<IReadOnlyList<TimeEntry>>();
+            return (await Get("me/time_entries")).ToObject<IList<TimeEntry>>().Reverse().ToImmutableList();
         }
 
         public async Task<TimeEntry> GetCurrentTimer()
         {
-            return (await Get("time_entries/current"))["data"].ToObject<TimeEntry>();
+            return (await Get("me/time_entries/current")).ToObject<TimeEntry>();
         }
 
         public async Task SetCurrentTimerProject(Project project)
         {
             var timer = await GetCurrentTimer();
-            await Put($"time_entries/{timer.id}", new JObject(
-                new JProperty("time_entry", new JObject(
-                    new JProperty("pid", project.id)
-                ))
+            await Put($"workspaces/{timer.workspace_id}/time_entries/{timer.id}", new JObject(
+                new JProperty("project_id", project.id)
             ));
         }
 
         public async Task SetCurrentTimerDescription(string description)
         {
             var timer = await GetCurrentTimer();
-            await Put($"time_entries/{timer.id}", new JObject(
-                new JProperty("time_entry", new JObject(
-                    new JProperty("description", description)
-                ))
+            await Put($"workspaces/{timer.workspace_id}/time_entries/{timer.id}", new JObject(
+                new JProperty("description", description)
             ));
         }
 
         public async Task SetCurrentTimerTags(IReadOnlyList<string> tags)
         {
             var timer = await GetCurrentTimer();
-            await Put($"time_entries/{timer.id}", new JObject(
-                new JProperty("time_entry", new JObject(
-                    new JProperty("tags", JArray.FromObject(tags))
-                ))
+            await Put($"workspaces/{timer.workspace_id}/time_entries/{timer.id}", new JObject(
+                new JProperty("tags", JArray.FromObject(tags))
             ));
         }
 
         public async Task<TimeEntry> StartTimer(Project project, string description, IReadOnlyList<string> tags)
         {
-            var response = await Post("time_entries/start", new JObject(
-                new JProperty("time_entry", project != null ?
-                    new JObject(
-                        new JProperty("pid", project.id),
-                        new JProperty("description", description),
-                        new JProperty("tags", JArray.FromObject(tags)),
-                        new JProperty("created_with", UserAgent)
-                    ) :
-                    new JObject(
-                        new JProperty("description", description),
-                        new JProperty("tags", JArray.FromObject(tags)),
-                        new JProperty("created_with", UserAgent)
-                    )
+            var workspaceId = project?.workspace_id ?? (await GetWorkspaces()).First().id;
+            var startTime = DateTimeOffset.Now;
+            var response = await Post($"workspaces/{workspaceId}/time_entries",
+                new JObject(
+                    new JProperty("workspace_id", workspaceId),
+                    new JProperty("project_id", project?.id),
+                    new JProperty("start", startTime),
+                    new JProperty("duration", -1),
+                    new JProperty("description", description),
+                    new JProperty("tags", JArray.FromObject(tags)),
+                    new JProperty("created_with", UserAgent)
                 )
-            ));
-            return response["data"].ToObject<TimeEntry>();
+            );
+            return response.ToObject<TimeEntry>();
         }
 
         public async Task<bool> StopTimer()
         {
-            var response = await Get("time_entries/current");
-            var currentTimer = response["data"].ToObject<JObject>();
+            var currentTimer = await GetCurrentTimer();
             if (currentTimer != null)
             {
-                await Put($"time_entries/{currentTimer["id"]}/stop", new JObject());
+                await Patch($"workspaces/{currentTimer.workspace_id}/time_entries/{currentTimer.id}/stop", new JObject());
                 return true;
             }
             return false;

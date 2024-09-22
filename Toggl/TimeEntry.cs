@@ -6,10 +6,10 @@ namespace Toggl_CLI.Toggl
     public class TimeEntry
     {
         public uint id;
-        public uint wid;
-        public uint pid;
+        public uint workspace_id;
+        public uint? project_id;
         public DateTimeOffset start;
-        public DateTimeOffset stop;
+        public DateTimeOffset? stop;
         public int duration;
         public string description;
         public IReadOnlyList<string> tags;
