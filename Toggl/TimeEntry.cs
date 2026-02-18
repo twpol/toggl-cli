@@ -5,7 +5,7 @@ namespace Toggl_CLI.Toggl
 {
     public class TimeEntry
     {
-        public uint id;
+        public ulong id;
         public uint workspace_id;
         public uint? project_id;
         public DateTimeOffset start;
